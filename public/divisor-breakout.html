@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>약수 벽돌깨기</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: 모눈종이 공책 느낌. 왼쪽 게임판, 오른쪽(좁으면 아래) 약수 사다리와 점수판 */
+:root {
+  --paper: #eaf0f8;
+  --board: #fbfdff;
+  --grid: #dbe5f3;
+  --ink: #1c2840;
+  --muted: #586a88;
+  --line: #c9d6ea;
+  --card: #ffffff;
+  --accent: #2f63d8;
+  --paddle: #2f63d8;
+  --ball: #e8505b;
+  --brick-ink: #1c2840;
+  --b0: #ff7b7b; /* 값이 1인 벽돌: 한 번 더 맞으면 깨짐 */
+  --b1: #ffad5c;
+  --b2: #ffd84d;
+  --b3: #8fe3a0;
+  --b4: #6fd6e6;
+  --b5: #9fb2ff;
+  --font-display: "Jua", "Gowun Dodum", system-ui, sans-serif;
+  --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1626; --board: #16203a; --grid: #213052; --ink: #e9eefb; --muted: #9eadcb;
+    --line: #2a3a5e; --card: #18233d; --accent: #7fa2ff; --paddle: #7fa2ff; --ball: #ff7a83;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1626; --board: #16203a; --grid: #213052; --ink: #e9eefb; --muted: #9eadcb;
+  --line: #2a3a5e; --card: #18233d; --accent: #7fa2ff; --paddle: #7fa2ff; --ball: #ff7a83;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { background: var(--paper); color: var(--ink); }
+body { font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
+.wrap {
+  max-width: 1000px; margin: 0 auto;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px;
+}
+header h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(30px, 6vw, 44px); margin: 0; line-height: 1.1; text-wrap: balance; }
+header h1 span { color: var(--accent); }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 820px) { .layout { grid-template-columns: minmax(0, 1fr); } .stage { max-width: 480px; margin: 0 auto; width: 100%; } }
+.stage { position: relative; }
+canvas {
+  display: block; width: 100%; max-width: 100%; aspect-ratio: 480 / 640; height: auto;
+  border-radius: 16px; border: 2px solid var(--line); background: var(--board);
+  touch-action: none; cursor: none;
+}
+.overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 20px; border-radius: 16px;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  backdrop-filter: blur(2px);
+}
+.ov-card {
+  background: var(--card); border: 2px solid var(--line); border-radius: 18px;
+  padding: 22px 22px 20px; max-width: 340px; width: 100%; text-align: center;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 10px 30px rgba(20, 35, 70, .18);
+}
+.ov-card .eyebrow { font-size: 13px; letter-spacing: .08em; color: var(--muted); }
+.ov-card h2 { font-family: var(--font-display); font-weight: 400; margin: 0; font-size: 30px; line-height: 1.2; text-wrap: balance; }
+.ov-card h2 b { color: var(--accent); font-weight: 400; }
+.ov-card p { margin: 0; color: var(--muted); }
+.ov-chain { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; font-family: var(--font-display); font-size: 22px; }
+.ov-chain .arr { color: var(--muted); font-size: 16px; }
+button {
+  font: inherit; cursor: pointer; border: none; border-radius: 12px;
+}
+.btn-main {
+  font-family: var(--font-display); font-size: 20px; padding: 10px 18px;
+  background: var(--accent); color: #fff; margin-top: 4px;
+}
+:root[data-theme="dark"] .btn-main { color: #0f1626; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-main { color: #0f1626; } }
+button:focus-visible { outline: 3px solid var(--ball); outline-offset: 2px; }
+.side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.panel h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 20px; }
+.hud { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
+.target { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: 18px; background: var(--accent); color: var(--card); }
+.target small { font-size: 13px; opacity: .9; }
+.target strong { font-family: var(--font-display); font-weight: 400; font-size: 46px; line-height: 1; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat span { font-size: 12px; color: var(--muted); letter-spacing: .05em; }
+.stat b { font-family: var(--font-display); font-weight: 400; font-size: 24px; font-variant-numeric: tabular-nums; }
+.stat b.hearts { color: var(--ball); letter-spacing: 2px; }
+.ladder { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.rung {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 54px; padding: 6px 8px; border-radius: 12px; border: 2px solid transparent;
+  color: var(--brick-ink);
+}
+.rung .v { font-family: var(--font-display); font-size: 26px; line-height: 1.1; }
+.rung .c { font-size: 12px; font-variant-numeric: tabular-nums; }
+.rung.empty { opacity: .35; }
+.rung.broken { background: transparent; border: 2px dashed var(--line); color: var(--muted); }
+.ladder .arr { align-self: center; color: var(--muted); font-family: var(--font-display); }
+.panel .note { margin: 0; font-size: 14px; color: var(--muted); }
+.rules { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.rules li::marker { color: var(--accent); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-sub { background: transparent; color: var(--ink); border: 2px solid var(--line); padding: 6px 12px; font-size: 14px; }
+.btn-sub:hover { border-color: var(--accent); }
+kbd { font-family: inherit; font-size: 13px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>약수 <span>벽돌깨기</span></h1>
+    <p>구슬이 벽돌에 닿을 때마다 벽돌의 수가 바로 다음 약수(더 작은 수)로 바뀌어요. 1이 된 벽돌에 한 번 더 닿으면 벽돌이 깨져요.</p>
+  </header>
+
+  <div class="layout">
+    <div class="stage">
+      <canvas id="board" width="480" height="640" aria-label="약수 벽돌깨기 게임판"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="ov-card" id="ovCard"></div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="hud">
+          <div class="target"><small>이번 수</small><strong id="hudN">20</strong></div>
+          <div class="stats">
+            <div class="stat"><span>라운드</span><b id="hudRound">1</b></div>
+            <div class="stat"><span>점수</span><b id="hudScore">0</b></div>
+            <div class="stat"><span>목숨</span><b class="hearts" id="hudLives">♥♥♥</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3 id="ladderTitle">20의 약수 (큰 수부터)</h3>
+        <div class="ladder" id="ladder"></div>
+        <p class="note">칸 아래 숫자는 지금 그 수가 적힌 벽돌의 개수예요.</p>
+      </section>
+
+      <section class="panel">
+        <h3>놀이 방법</h3>
+        <ul class="rules">
+          <li>마우스나 손가락으로 막대를 움직여요. 키보드는 <kbd>←</kbd> <kbd>→</kbd></li>
+          <li>클릭, 화면 터치, <kbd>스페이스</kbd>로 구슬을 쏴요.</li>
+          <li>20 → 10 → 5 → 4 → 2 → 1 처럼 벽돌 수가 약수를 따라 작아져요.</li>
+          <li>모든 벽돌을 깨면 새로운 수로 다음 라운드가 시작돼요.</li>
+        </ul>
+        <div class="controls">
+          <button class="btn-sub" id="soundBtn" type="button">소리 끄기</button>
+          <button class="btn-sub" id="restartBtn" type="button">처음부터 다시</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 480, H = 640;
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const ovCard = document.getElementById('ovCard');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- 화면 크기 / 색상 ----------
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const colors = {};
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    ['board', 'grid', 'ink', 'muted', 'paddle', 'ball', 'brick-ink', 'b0', 'b1', 'b2', 'b3', 'b4', 'b5']
+      .forEach(k => colors[k] = cs.getPropertyValue('--' + k).trim());
+  }
+  readColors();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ---------- 수학 ----------
+  function divisorsDesc(n) {
+    const out = [];
+    for (let i = n; i >= 1; i--) if (n % i === 0) out.push(i);
+    return out;
+  }
+  function brickColor(remaining) { return colors['b' + Math.min(remaining, 5)]; }
+
+  // ---------- 게임 상태 ----------
+  const PADDLE_Y = H - 44, PADDLE_H = 14, BALL_R = 8;
+  const S = {
+    n: 20, divs: [], bricks: [], round: 1, score: 0, lives: 3,
+    mode: 'ready', // ready | play | clear | over
+    paddle: { x: W / 2, w: 100 },
+    ball: { x: W / 2, y: PADDLE_Y - BALL_R - 1, vx: 0, vy: 0, stuck: true },
+    speed: 300, popups: [], parts: [], lastN: 0
+  };
+
+  function buildBricks() {
+    const len = S.divs.length;
+    const rows = len <= 2 ? 4 : len <= 4 ? 3 : 2;
+    const cols = 5, margin = 20, gap = 10, top = 70, bh = 46;
+    const bw = (W - margin * 2 - gap * (cols - 1)) / cols;
+    S.bricks = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        S.bricks.push({ x: margin + c * (bw + gap), y: top + r * (bh + gap), w: bw, h: bh, idx: 0, alive: true, flash: 0 });
+      }
+    }
+  }
+
+  function newRound() {
+    let n;
+    do { n = 1 + Math.floor(Math.random() * 20); } while (n === S.lastN);
+    S.lastN = n;
+    S.n = n;
+    S.divs = divisorsDesc(n);
+    S.speed = Math.min(300 + (S.round - 1) * 20, 420);
+    buildBricks();
+    resetBall();
+    S.popups = []; S.parts = [];
+    S.mode = 'ready';
+    updateHUD();
+    showOverlay('ready');
+  }
+
+  function resetBall() {
+    S.ball.stuck = true;
+    S.ball.x = S.paddle.x;
+    S.ball.y = PADDLE_Y - BALL_R - 1;
+  }
+
+  function launch() {
+    if (S.mode !== 'play' || !S.ball.stuck) return;
+    const ang = (Math.random() * 0.8 - 0.4);
+    S.ball.vx = S.speed * Math.sin(ang);
+    S.ball.vy = -S.speed * Math.cos(ang);
+    S.ball.stuck = false;
+    beep(520, 0.06);
+  }
+
+  function chainHTML() {
+    return S.divs.map((d, i) => `<span>${d}</span>${i < S.divs.length - 1 ? '<span class="arr">→</span>' : ''}`).join('')
+      + '<span class="arr">→</span><span>깨짐</span>';
+  }
+
+  function showOverlay(kind) {
+    let html = '';
+    if (kind === 'ready') {
+      html = `<div class="eyebrow">라운드 ${S.round}</div>
+        <h2>이번 수는 <b>${S.n}</b></h2>
+        <p>${S.n}의 약수를 큰 수부터 차례로 내려가요.</p>
+        <div class="ov-chain">${chainHTML()}</div>
+        <button class="btn-main" id="ovBtn" type="button">시작하기</button>`;
+    } else if (kind === 'clear') {
+      html = `<div class="eyebrow">라운드 ${S.round} 성공</div>
+        <h2><b>${S.n}</b>의 약수는 ${S.divs.length}개!</h2>
+        <div class="ov-chain">${S.divs.join(', ')}</div>
+        <p>모든 벽돌을 깼어요. 점수 ${S.score}점</p>
+        <button class="btn-main" id="ovBtn" type="button">다음 라운드</button>`;
+    } else if (kind === 'over') {
+      html = `<div class="eyebrow">게임 끝</div>
+        <h2>점수 <b>${S.score}</b>점</h2>
+        <p>라운드 ${S.round}까지 왔어요. 마지막 수는 ${S.n}이었어요.</p>
+        <div class="ov-chain">${S.divs.join(', ')}</div>
+        <button class="btn-main" id="ovBtn" type="button">다시 하기</button>`;
+    }
+    ovCard.innerHTML = html;
+    overlay.hidden = false;
+    const btn = document.getElementById('ovBtn');
+    btn.addEventListener('click', e => { e.stopPropagation(); overlayAction(); });
+    btn.focus({ preventScroll: true });
+  }
+
+  function overlayAction() {
+    if (S.mode === 'ready') { S.mode = 'play'; overlay.hidden = true; resetBall(); }
+    else if (S.mode === 'clear') { S.round++; newRound(); }
+    else if (S.mode === 'over') { restart(); }
+  }
+
+  function restart() {
+    S.round = 1; S.score = 0; S.lives = 3; S.lastN = 0;
+    newRound();
+  }
+
+  // ---------- 점수판 ----------
+  const hudN = document.getElementById('hudN'), hudRound = document.getElementById('hudRound');
+  const hudScore = document.getElementById('hudScore'), hudLives = document.getElementById('hudLives');
+  const ladder = document.getElementById('ladder'), ladderTitle = document.getElementById('ladderTitle');
+
+  function updateHUD() {
+    hudN.textContent = S.n;
+    hudRound.textContent = S.round;
+    hudScore.textContent = S.score;
+    hudLives.textContent = S.lives > 0 ? '♥'.repeat(S.lives) : '-';
+    ladderTitle.textContent = `${S.n}의 약수 (큰 수부터)`;
+    const counts = S.divs.map(() => 0);
+    let broken = 0;
+    S.bricks.forEach(b => b.alive ? counts[b.idx]++ : broken++);
+    const len = S.divs.length;
+    let html = '';
+    S.divs.forEach((d, i) => {
+      const bg = brickColor(len - 1 - i);
+      html += `<div class="rung${counts[i] ? '' : ' empty'}" style="background:${bg}"><span class="v">${d}</span><span class="c">${counts[i]}개</span></div>`;
+      html += '<span class="arr">→</span>';
+    });
+    html += `<div class="rung broken"><span class="v">깨짐</span><span class="c">${broken}개</span></div>`;
+    ladder.innerHTML = html;
+  }
+
+  // ---------- 효과 ----------
+  let soundOn = true, actx = null;
+  function beep(freq, dur = 0.08) {
+    if (!soundOn) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = actx.currentTime;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'triangle'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (e) { /* 소리를 못 내도 게임은 계속 */ }
+  }
+  function popup(x, y, text) { S.popups.push({ x, y, text, t: 0 }); }
+  function burst(b) {
+    if (reduceMotion) return;
+    const col = colors.b0;
+    for (let i = 0; i < 18; i++) {
+      S.parts.push({
+        x: b.x + Math.random() * b.w, y: b.y + Math.random() * b.h,
+        vx: (Math.random() - 0.5) * 260, vy: -Math.random() * 220, t: 0, col
+      });
+    }
+  }
+
+  // ---------- 벽돌에 닿았을 때 ----------
+  function hitBrick(b) {
+    const v = S.divs[b.idx];
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    if (v === 1) {
+      b.alive = false;
+      S.score += 50;
+      burst(b);
+      popup(cx, cy, '깨짐! +50');
+      beep(880, 0.12);
+    } else {
+      b.idx++;
+      b.flash = 1;
+      S.score += 10;
+      popup(cx, cy, `${v} → ${S.divs[b.idx]}`);
+      beep(330 + b.idx * 70, 0.07);
+    }
+    updateHUD();
+    if (S.bricks.every(x => !x.alive)) {
+      S.mode = 'clear';
+      setTimeout(() => showOverlay('clear'), 500);
+    }
+  }
+
+  function loseLife() {
+    S.lives--;
+    beep(180, 0.25);
+    updateHUD();
+    if (S.lives <= 0) {
+      S.mode = 'over';
+      showOverlay('over');
+    } else {
+      resetBall();
+    }
+  }
+
+  // ---------- 물리 ----------
+  const keys = { left: false, right: false };
+
+  function update(dt) {
+    const p = S.paddle, b = S.ball;
+    if (keys.left) p.x -= 520 * dt;
+    if (keys.right) p.x += 520 * dt;
+    p.x = Math.max(p.w / 2, Math.min(W - p.w / 2, p.x));
+
+    S.bricks.forEach(br => { if (br.flash > 0) br.flash = Math.max(0, br.flash - dt * 4); });
+    S.popups.forEach(q => q.t += dt);
+    S.popups = S.popups.filter(q => q.t < 0.9);
+    S.parts.forEach(q => { q.t += dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 600 * dt; });
+    S.parts = S.parts.filter(q => q.t < 0.8);
+
+    if (S.mode !== 'play') return;
+    if (b.stuck) { b.x = p.x; b.y = PADDLE_Y - BALL_R - 1; return; }
+
+    const steps = Math.max(1, Math.ceil((S.speed * dt) / 4));
+    const sdt = dt / steps;
+    for (let s = 0; s < steps; s++) {
+      b.x += b.vx * sdt; b.y += b.vy * sdt;
+
+      // 벽
+      if (b.x < BALL_R) { b.x = BALL_R; b.vx = Math.abs(b.vx); beep(260, 0.03); }
+      if (b.x > W - BALL_R) { b.x = W - BALL_R; b.vx = -Math.abs(b.vx); beep(260, 0.03); }
+      if (b.y < BALL_R) { b.y = BALL_R; b.vy = Math.abs(b.vy); beep(260, 0.03); }
+
+      // 막대
+      if (b.vy > 0 && b.y + BALL_R >= PADDLE_Y && b.y - BALL_R <= PADDLE_Y + PADDLE_H &&
+          b.x >= p.x - p.w / 2 - BALL_R && b.x <= p.x + p.w / 2 + BALL_R) {
+        const off = Math.max(-1, Math.min(1, (b.x - p.x) / (p.w / 2)));
+        const ang = off * 1.05; // 최대 약 60도
+        b.vx = S.speed * Math.sin(ang);
+        b.vy = -S.speed * Math.cos(ang);
+        b.y = PADDLE_Y - BALL_R;
+        beep(440, 0.04);
+      }
+
+      // 벽돌
+      for (const br of S.bricks) {
+        if (!br.alive) continue;
+        const cx = Math.max(br.x, Math.min(b.x, br.x + br.w));
+        const cy = Math.max(br.y, Math.min(b.y, br.y + br.h));
+        const dx = b.x - cx, dy = b.y - cy;
+        if (dx * dx + dy * dy < BALL_R * BALL_R) {
+          const oL = b.x + BALL_R - br.x, oR = br.x + br.w - (b.x - BALL_R);
+          const oT = b.y + BALL_R - br.y, oB = br.y + br.h - (b.y - BALL_R);
+          const mX = Math.min(oL, oR), mY = Math.min(oT, oB);
+          if (mX < mY) {
+            if (oL < oR) { b.vx = -Math.abs(b.vx); b.x -= mX; } else { b.vx = Math.abs(b.vx); b.x += mX; }
+          } else {
+            if (oT < oB) { b.vy = -Math.abs(b.vy); b.y -= mY; } else { b.vy = Math.abs(b.vy); b.y += mY; }
+          }
+          hitBrick(br);
+          break;
+        }
+      }
+      if (S.mode !== 'play') return;
+
+      // 바닥으로 떨어짐
+      if (b.y - BALL_R > H) { loseLife(); return; }
+    }
+  }
+
+  // ---------- 그리기 ----------
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function draw() {
+    ctx.fillStyle = colors.board;
+    ctx.fillRect(0, 0, W, H);
+
+    // 모눈
+    ctx.strokeStyle = colors.grid; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 24; x < W; x += 24) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    for (let y = 24; y < H; y += 24) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+    ctx.stroke();
+
+    // 위쪽 안내
+    ctx.fillStyle = colors.muted;
+    ctx.font = '18px "Jua", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(`${S.n}의 약수: ${S.divs.join(', ')}`, 20, 36);
+
+    // 벽돌
+    const len = S.divs.length;
+    ctx.textAlign = 'center';
+    for (const br of S.bricks) {
+      if (!br.alive) continue;
+      const remaining = len - 1 - br.idx;
+      ctx.fillStyle = 'rgba(20, 30, 60, 0.18)';
+      roundRect(br.x, br.y + 4, br.w, br.h, 10); ctx.fill();
+      ctx.fillStyle = brickColor(remaining);
+      roundRect(br.x, br.y, br.w, br.h, 10); ctx.fill();
+      if (br.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${br.flash * 0.75})`;
+        roundRect(br.x, br.y, br.w, br.h, 10); ctx.fill();
+      }
+      ctx.fillStyle = colors['brick-ink'];
+      ctx.font = '26px "Jua", sans-serif';
+      ctx.fillText(String(S.divs[br.idx]), br.x + br.w / 2, br.y + br.h / 2 - 3);
+      // 남은 횟수 점 (깨지기까지 닿아야 하는 횟수)
+      const hits = remaining + 1;
+      const dotGap = 7, startX = br.x + br.w / 2 - (hits - 1) * dotGap / 2;
+      for (let i = 0; i < hits; i++) {
+        ctx.beginPath(); ctx.arc(startX + i * dotGap, br.y + br.h - 7, 2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // 막대
+    const p = S.paddle;
+    ctx.fillStyle = colors.paddle;
+    roundRect(p.x - p.w / 2, PADDLE_Y, p.w, PADDLE_H, 7); ctx.fill();
+
+    // 구슬
+    ctx.fillStyle = colors.ball;
+    ctx.beginPath(); ctx.arc(S.ball.x, S.ball.y, BALL_R, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(S.ball.x - 2.5, S.ball.y - 2.5, 2.5, 0, Math.PI * 2); ctx.fill();
+
+    // 파편
+    for (const q of S.parts) {
+      ctx.globalAlpha = 1 - q.t / 0.8;
+      ctx.fillStyle = q.col;
+      ctx.fillRect(q.x - 3, q.y - 3, 6, 6);
+    }
+    ctx.globalAlpha = 1;
+
+    // 바뀐 숫자 표시
+    ctx.font = '22px "Jua", sans-serif';
+    for (const q of S.popups) {
+      const k = q.t / 0.9;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = 4; ctx.strokeStyle = colors.board;
+      const y = q.y - (reduceMotion ? 0 : k * 34) - 26;
+      ctx.strokeText(q.text, q.x, y);
+      ctx.fillStyle = colors.ink;
+      ctx.fillText(q.text, q.x, y);
+    }
+    ctx.globalAlpha = 1;
+
+    if (S.mode === 'play' && S.ball.stuck) {
+      ctx.fillStyle = colors.muted;
+      ctx.font = '17px "Jua", sans-serif';
+      ctx.fillText('클릭 · 터치 · 스페이스로 구슬 쏘기', W / 2, PADDLE_Y - 40);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- 입력 ----------
+  function toBoardX(clientX) {
+    const r = canvas.getBoundingClientRect();
+    return (clientX - r.left) * (W / r.width);
+  }
+  canvas.addEventListener('pointermove', e => { S.paddle.x = toBoardX(e.clientX); });
+  canvas.addEventListener('pointerdown', e => {
+    S.paddle.x = toBoardX(e.clientX);
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    launch();
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { keys.left = true; e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { keys.right = true; e.preventDefault(); }
+    else if (e.key === ' ' || e.key === 'Enter') {
+      if (!overlay.hidden) {
+        if (e.target && e.target.id === 'ovBtn') return; // 버튼 기본 동작에 맡김
+        overlayAction();
+      } else launch();
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft') keys.left = false;
+    if (e.key === 'ArrowRight') keys.right = false;
+  });
+
+  const soundBtn = document.getElementById('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '소리 끄기' : '소리 켜기';
+  });
+  document.getElementById('restartBtn').addEventListener('click', restart);
+
+  newRound();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(updateHUD);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
